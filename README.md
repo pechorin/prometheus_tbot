@@ -1,6 +1,6 @@
 # prometheus_bot
 
-This bot is designed to alert messages from [alertmanager](https://github.com/prometheus/alertmanager).
+rewriting in progress prometheus telegram bot
 
 ## Compile
 
@@ -21,12 +21,13 @@ make
     telegram_token: "token goes here"
     # ONLY IF YOU USING TEMPLATE required for test
 
-    template_path: "template.tmpl" 
+    message_template:
+        |
+            <b>{{ .Annotations.message }}</b>
+            <code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]
+
     time_zone: "Europe/Rome"
     split_token: "|"    
-
-    # ONLY IF YOU USING DATA FORMATTING FUNCTION, NOTE for developer: important or test fail
-    time_outdata: "02/01/2006 15:04:05" 
     split_msg_byte: 4000
     ```
 
