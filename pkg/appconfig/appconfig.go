@@ -47,6 +47,7 @@ type Config struct {
 	TimeOutFormat     string `json:"time_outdata"`
 	SplitChart        string `json:"split_token"`
 	SplitMessageBytes int    `json:"split_msg_byte"`
+	MessageTemplate   string `json:"message_template"`
 }
 
 // New создает конфиг с дефолтными значенииями
@@ -79,7 +80,7 @@ func Setup() *Config {
 	envConfig.Load(envSrc)
 
 	if newPath := envConfig.Get("config", "path").String(""); newPath != "" {
-		fmt.Println("load config from ENV -> " + newPath)
+		// fmt.Println("load config from ENV -> " + newPath)
 		app.Path = newPath
 	}
 
@@ -105,9 +106,20 @@ func Setup() *Config {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("APP after all steps -> %v\n", app)
+	if len(app.MessageTemplate) == 0 {
+		app.MessageTemplate = defaultMessageTemplate()
+	}
+
+	// fmt.Printf("APP after all steps -> %v\n", app)
 
 	return app
+}
+
+func defaultMessageTemplate() string {
+	return `
+
+    <b>{{ .Annotations.message }}</b>
+    <code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]`
 }
 
 func main() {}

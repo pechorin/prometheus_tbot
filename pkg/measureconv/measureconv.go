@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pechorin/prometheus_bot/pkg/appconfig"
+	"github.com/pechorin/prometheus_tbot/pkg/appconfig"
 )
 
 // Все конвертации Converter происходят с уветом конфига приложения
