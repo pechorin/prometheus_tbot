@@ -15,24 +15,40 @@ make
 
 1. Create Telegram bot with [BotFather](https://t.me/BotFather), it will return your bot token
 
-2. Specify telegram token in ```config.yaml```:
+2. Create configuration `config.yaml`:
 
-    ```yml
-    telegram_token: "token goes here"
-    # ONLY IF YOU USING TEMPLATE required for test
+```yml
+telegram_token: "token goes here"
 
-    message_template:
-        |
-            <b>{{ .Annotations.message }}</b>
-            <code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]
+# all templates should be defined here
+templates:
+  default:
+    |
+      <b>{{ .Annotations.message }}</b>
+      <code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]
+  only_message:
+    |
+      <b>{{ .Annotations.message }}</b>
 
-    time_zone: "Europe/Rome"
-    split_token: "|"    
-    split_msg_byte: 4000
-    ```
+# do not add blank line after each alert
+# NOT IMPLEMENTED: нужно это кому-то вообще?
+# disable_message_line_separator:
+#   - default
+#   - only_message
+
+# (chats -> template) mapping configuration
+chats_templates:
+  # "chatID": custom_template_name
+  "-228572021": only_message
+  "46733847": default
+
+time_zone: "Europe/Rome"
+split_token: "|"    
+split_msg_byte: 4000
+```
 
 3. Run ```telegram_bot```. See ```prometheus_bot --help``` for command line options
-3. Get chat ID with one of two ways
+4. Get chat ID with one of two ways
     1. Start conversation, send message to bot mentioning it
     2. Add your bot to a group. It should report group id now. To get ID of a group if bot is already a member [send a message that starts with `/`](https://core.telegram.org/bots#privacy-mode)
 
