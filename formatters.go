@@ -125,9 +125,9 @@ func (app *Application) TestFormatter(alerts *Alerts, template string) []*bytes.
 	}
 
 	if alerts.Status == "firing" {
-		currentBuffer.WriteString("Firing🔥\n")
+		currentBuffer.WriteString("<b>Firing</b>🔥\n\n")
 	} else {
-		currentBuffer.WriteString(alerts.Status + "\n")
+		currentBuffer.WriteString("<b>" + alerts.Status + "</b>" + "\n\n")
 	}
 
 	for _, alert := range alerts.Alerts {
@@ -144,7 +144,9 @@ func (app *Application) TestFormatter(alerts *Alerts, template string) []*bytes.
 			currentBuffer = buffers[currentBufferIndex]
 		}
 
+		// currentBuffer.WriteString("\n")
 		currentBuffer.WriteString(tempBuffer.String())
+		currentBuffer.WriteString("\n")
 	}
 
 	return buffers
