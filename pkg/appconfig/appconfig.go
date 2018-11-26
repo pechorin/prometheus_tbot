@@ -39,15 +39,16 @@ const ()
 // Config является состоянием конфигурации приложения
 type Config struct {
 	Path              string
-	ListenAddr        string `json:"listen_addr"`
-	Debug             bool   `json:"debug"`
-	TelegramToken     string `json:"telegram_token"`
-	TemplatePath      string `json:"template_path"`
-	TimeZone          string `json:"time_zone"`
-	TimeOutFormat     string `json:"time_outdata"`
-	SplitChart        string `json:"split_token"`
-	SplitMessageBytes int    `json:"split_msg_byte"`
-	MessageTemplate   string `json:"message_template"`
+	ListenAddr        string            `json:"listen_addr"`
+	Debug             bool              `json:"debug"`
+	TelegramToken     string            `json:"telegram_token"`
+	TemplatePath      string            `json:"template_path"`
+	TimeZone          string            `json:"time_zone"`
+	TimeOutFormat     string            `json:"time_outdata"`
+	SplitChart        string            `json:"split_token"`
+	SplitMessageBytes int               `json:"split_msg_byte"`
+	Templates         map[string]string `json:"templates"`
+	ChatsTemplates    map[string]string `json:"chats_templates"`
 }
 
 // New создает конфиг с дефолтными значенииями
@@ -106,8 +107,8 @@ func Setup() *Config {
 		log.Fatal(err)
 	}
 
-	if len(app.MessageTemplate) == 0 {
-		app.MessageTemplate = defaultMessageTemplate()
+	if len(app.Templates) == 0 {
+		app.Templates["default"] = defaultMessageTemplate()
 	}
 
 	// fmt.Printf("APP after all steps -> %v\n", app)
@@ -117,7 +118,6 @@ func Setup() *Config {
 
 func defaultMessageTemplate() string {
 	return `
-
     <b>{{ .Annotations.message }}</b>
     <code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]`
 }

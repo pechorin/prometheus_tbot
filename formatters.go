@@ -111,14 +111,14 @@ func (*Application) AlertFormatStandard(alerts Alerts) string {
 }
 
 // TODO: не падать, а возвращать ошибку?
-func (app *Application) TestFormatter(alerts *Alerts) []*bytes.Buffer {
+func (app *Application) TestFormatter(alerts *Alerts, template string) []*bytes.Buffer {
 	buffers := make([]*bytes.Buffer, 0)
 	buffers = append(buffers, new(bytes.Buffer))
 
 	currentBufferIndex := 0
 	currentBuffer := buffers[currentBufferIndex]
 
-	tmpl, err := textTemplate.New("defaultMessage").Funcs(app.TextTemplateFuncMap()).Parse(app.config.MessageTemplate)
+	tmpl, err := textTemplate.New("defaultMessage").Funcs(app.TextTemplateFuncMap()).Parse(template)
 
 	if err != nil {
 		log.Fatalf("Problem parsing template messageMini: %v", err)

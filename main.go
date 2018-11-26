@@ -199,7 +199,7 @@ func (app *Application) HTTPAlertHandler(c *gin.Context) {
 		return
 	}
 
-	chatIdsStrings := make([]string, len(chatIds))
+	// chatIdsStrings := make([]string, len(chatIds))
 
 	alerts := new(Alerts)
 
@@ -214,13 +214,23 @@ func (app *Application) HTTPAlertHandler(c *gin.Context) {
 		return
 	}
 
-	messagesBuffers := app.TestFormatter(alerts)
+	defaultMessages := app.TestFormatter(alerts, app.config.Templates["default"])
 
 	for _, chatID := range chatIds {
-		str := strconv.FormatInt(chatID, 10)
-		chatIdsStrings = append(chatIdsStrings, str)
+		chatIDStr := strconv.FormatInt(chatID, 10)
+		// chatIdsStrings = append(chatIdsStrings, str)
 
-		for idx, buffer := range messagesBuffers {
+		renderBuffersPtr := &defaultMessages
+
+		if chatTemplateName, ok := app.config.ChatsTemplates[chatIDStr]; ok == true {
+			if chatTemplate, ok := app.config.Templates[chatTemplateName]; ok == true {
+				chatMessages := app.TestFormatter(alerts, chatTemplate)
+				renderBuffersPtr = &chatMessages
+			}
+		}
+
+		// TODO: run with go
+		for idx, buffer := range *renderBuffersPtr {
 			if buffer.Len() > 0 {
 				if idx > 0 {
 					time.Sleep(3)
