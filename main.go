@@ -6,7 +6,7 @@ TODO:
 */
 
 import (
-	"encoding/json"
+	"bytes"
 	"time"
 
 	"fmt"
@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gin-gonic/gin/binding"
 	"gopkg.in/telegram-bot-api.v4"
 
 	"html/template"
@@ -115,13 +114,13 @@ func (app *Application) telegramBot(bot *tgbotapi.BotAPI) {
 	}
 
 	for update := range updates {
-		if update.Message == nil {
-			if app.config.Debug {
-				log.Printf("[UNKNOWN_MESSAGE] [%v]", update)
+		if update.Message != nil {
+			switch update.Message.Text {
+			case "/chatID", "/chatid", "/chatId":
+				introduce(update)
+			default:
+				continue
 			}
-			continue
-		} else {
-			introduce(update)
 		}
 	}
 }
@@ -141,18 +140,6 @@ func main() {
 	if app.config.Debug {
 		app.bot.Debug = true
 	}
-	if app.config.TemplatePath != "" {
-
-		app.template = app.loadTemplate(app.config.TemplatePath)
-
-		if app.config.TimeZone == "" {
-			log.Fatalf("You must define time_zone of your bot")
-			panic(-1)
-		}
-
-	} else {
-		app.template = nil
-	}
 
 	if !(app.config.Debug) {
 		gin.SetMode(gin.ReleaseMode)
@@ -169,10 +156,10 @@ func main() {
 
 func (app *Application) parseMultiParam(s string, c *gin.Context) []int64 {
 	chats := strings.Split(s, "/")
-	chatIds := make([]int64, len(chats))
+	chatIds := []int64{}
 
 	for _, chat := range chats {
-		if len(chat) == 0 { // первый элемент слайса почему-то пустая строка
+		if chat == "" {
 			continue
 		}
 
@@ -184,8 +171,11 @@ func (app *Application) parseMultiParam(s string, c *gin.Context) []int64 {
 		}
 	}
 
-	return chatIds
+	if app.config.Debug == true {
+		log.Println("Chat ids for send", chatIds)
+	}
 
+	return chatIds
 }
 
 func (app *Application) HTTPAlertHandler(c *gin.Context) {
@@ -193,13 +183,11 @@ func (app *Application) HTTPAlertHandler(c *gin.Context) {
 
 	if len(chatIds) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"err": "no chats provided",
+			"desc": "no chats provided",
 		})
 
 		return
 	}
-
-	// chatIdsStrings := make([]string, len(chatIds))
 
 	alerts := new(Alerts)
 
@@ -214,98 +202,99 @@ func (app *Application) HTTPAlertHandler(c *gin.Context) {
 		return
 	}
 
-	defaultMessages := app.TestFormatter(alerts, app.config.Templates["default"])
+	bufferCh := make(chan int64, len(chatIds))
+
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Println("Panic handled while sending message:", err)
+			}
+		}()
+
+		for chatID := range bufferCh {
+			if chatID == 0 {
+				log.Println("Skip for 0 chatID")
+				continue
+			}
+
+			defaultMessages := app.NewTemplateMessage(alerts, app.config.Templates["default"])
+
+			chatIDStr := strconv.FormatInt(chatID, 10)
+
+			renderBuffersPtr := &defaultMessages
+
+			if chatTemplateName, ok := app.config.ChatsTemplates[chatIDStr]; ok == true {
+				if chatTemplate, ok := app.config.Templates[chatTemplateName]; ok == true {
+					chatMessages := app.NewTemplateMessage(alerts, chatTemplate)
+					renderBuffersPtr = &chatMessages
+				}
+			}
+
+			for idx, buffer := range *renderBuffersPtr {
+				if buffer.Len() > 0 {
+					if idx > 0 {
+						time.Sleep(3)
+					}
+
+					msg := tgbotapi.NewMessage(chatID, buffer.String())
+					msg.ParseMode = "HTML"
+
+					if _, err := app.bot.Send(msg); err != nil {
+						log.Println("Error while sending message:", chatID ,err)
+					}
+				}
+			}
+
+		}
+	}()
 
 	for _, chatID := range chatIds {
-		chatIDStr := strconv.FormatInt(chatID, 10)
-		// chatIdsStrings = append(chatIdsStrings, str)
-
-		renderBuffersPtr := &defaultMessages
-
-		if chatTemplateName, ok := app.config.ChatsTemplates[chatIDStr]; ok == true {
-			if chatTemplate, ok := app.config.Templates[chatTemplateName]; ok == true {
-				chatMessages := app.TestFormatter(alerts, chatTemplate)
-				renderBuffersPtr = &chatMessages
-			}
-		}
-
-		// TODO: run with go
-		for idx, buffer := range *renderBuffersPtr {
-			if buffer.Len() > 0 {
-				if idx > 0 {
-					time.Sleep(3)
-				}
-
-				msg := tgbotapi.NewMessage(chatID, buffer.String())
-				msg.ParseMode = "HTML"
-				app.bot.Send(msg)
-			}
-		}
-
+		log.Println("Sending chat-id", chatID)
+		bufferCh <- chatID
 	}
+
+	close(bufferCh)
 
 	c.String(http.StatusOK, "OK, delivered for", len(chatIds), "chats")
 }
 
-// DEPRECATED:
-func (app *Application) POST_Handling(c *gin.Context) {
-	var msgtext string
-	var alerts Alerts
+func (app *Application) NewTemplateMessage(alerts *Alerts, template string) []*bytes.Buffer {
+	buffers := make([]*bytes.Buffer, 0)
+	buffers = append(buffers, new(bytes.Buffer))
 
-	chatid, err := strconv.ParseInt(c.Param("chatid"), 10, 64)
+	currentBufferIndex := 0
+	currentBuffer := buffers[currentBufferIndex]
 
-	log.Printf("Bot alert post: %d", chatid)
+	tmpl, err := textTemplate.New("defaultMessage").Funcs(app.TextTemplateFuncMap()).Parse(template)
 
 	if err != nil {
-		log.Printf("Cat't parse chat id: %q", c.Param("chatid"))
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"err": fmt.Sprint(err),
-		})
-		return
+		log.Fatalf("Problem parsing template messageMini: %v", err)
 	}
 
-	binding.JSON.Bind(c.Request, &alerts)
-
-	s, err := json.Marshal(alerts)
-	if err != nil {
-		log.Print(err)
-		return
-	}
-
-	log.Println("+------------------  A L E R T  J S O N  -------------------+")
-	log.Printf("%s", s)
-	log.Println("+-----------------------------------------------------------+\n\n")
-
-	// Decide how format Text
-	if app.config.TemplatePath == "" {
-		msgtext = app.AlertFormatStandard(alerts)
+	if alerts.Status == "firing" {
+		currentBuffer.WriteString("<b>Firing</b>🔥\n\n")
 	} else {
-		msgtext = app.AlertFormatTemplate(alerts)
+		currentBuffer.WriteString("<b>" + alerts.Status + "</b>" + "\n\n")
 	}
-	for _, subString := range splitString(msgtext, app.config.SplitMessageBytes) {
-		msg := tgbotapi.NewMessage(chatid, subString)
-		msg.ParseMode = tgbotapi.ModeHTML
 
-		// Print in Log result message
-		log.Println("+---------------  F I N A L   M E S S A G E  ---------------+")
-		log.Println(subString)
-		log.Println("+-----------------------------------------------------------+")
+	for _, alert := range alerts.Alerts {
+		tempBuffer := new(bytes.Buffer)
 
-		msg.DisableWebPagePreview = true
-
-		sendmsg, err := app.bot.Send(msg)
-		if err == nil {
-			c.String(http.StatusOK, "telegram msg sent.")
-		} else {
-			log.Printf("Error sending message: %s", err)
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"err":     fmt.Sprint(err),
-				"message": sendmsg,
-				"srcmsg":  fmt.Sprint(msgtext),
-			})
-			msg := tgbotapi.NewMessage(chatid, "Error sending message, checkout logs")
-			app.bot.Send(msg)
+		if err := tmpl.Execute(tempBuffer, alert); err != nil {
+			log.Fatalf("Problem executing template: %v", err)
 		}
+
+		// if currentBuffer Len is reach limit then create new buffer
+		if (currentBuffer.Len() + tempBuffer.Len()) > app.config.SplitMessageBytes {
+			buffers = append(buffers, new(bytes.Buffer))
+			currentBufferIndex = currentBufferIndex + 1
+			currentBuffer = buffers[currentBufferIndex]
+		}
+
+		// currentBuffer.WriteString("\n")
+		currentBuffer.WriteString(tempBuffer.String())
+		currentBuffer.WriteString("\n")
 	}
 
+	return buffers
 }

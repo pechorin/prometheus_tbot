@@ -1,5 +1,7 @@
 prometheus_bot
+prometheus_tbot
 bot.log
 config.yaml
 .vscode
 kbs.json
+.idea
