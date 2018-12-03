@@ -7,6 +7,7 @@ TODO:
 
 import (
 	"bytes"
+	"html/template"
 	"time"
 
 	"fmt"
@@ -18,7 +19,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"gopkg.in/telegram-bot-api.v4"
 
-	"html/template"
 	textTemplate "text/template"
 
 	"github.com/pechorin/prometheus_tbot/pkg/appconfig"
@@ -49,7 +49,6 @@ type Application struct {
 	config           *appconfig.Config
 	bot              *tgbotapi.BotAPI
 	measureConverter *measureconv.Converter
-	template         *template.Template
 }
 
 func NewApplication() *Application {
@@ -60,82 +59,18 @@ func NewApplication() *Application {
 	return app
 }
 
-func hasKey(dict map[string]interface{}, key_search string) bool {
-	if _, ok := dict[key_search]; ok {
-		return true
-	}
-	return false
-}
-
-// TODO: move to formaters with other template loader functions?
-func (app *Application) TemplateFuncMap() (tm template.FuncMap) {
-	tm = template.FuncMap{
-		"FormatDate":        app.measureConverter.FormatDate,
-		"ToUpper":           strings.ToUpper,
-		"ToLower":           strings.ToLower,
-		"Title":             strings.Title,
-		"FormatFloat":       app.measureConverter.FormatFloat,
-		"FormatByte":        app.measureConverter.FormatByte,
-		"FormatMeasureUnit": app.measureConverter.FormatMeasureUnit,
-		"HasKey":            hasKey,
-	}
-
-	return
-}
-
-func (app *Application) TextTemplateFuncMap() (tm textTemplate.FuncMap) {
-	tm = textTemplate.FuncMap{
-		"FormatDate":        app.measureConverter.FormatDate,
-		"ToUpper":           strings.ToUpper,
-		"ToLower":           strings.ToLower,
-		"Title":             strings.Title,
-		"FormatFloat":       app.measureConverter.FormatFloat,
-		"FormatByte":        app.measureConverter.FormatByte,
-		"FormatMeasureUnit": app.measureConverter.FormatMeasureUnit,
-		"HasKey":            hasKey,
-	}
-
-	return
-}
-
-// TODO: move to package
-func (app *Application) telegramBot(bot *tgbotapi.BotAPI) {
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	updates, err := bot.GetUpdatesChan(u)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	introduce := func(update tgbotapi.Update) {
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Chat id is '%d'", update.Message.Chat.ID))
-		app.bot.Send(msg)
-	}
-
-	for update := range updates {
-		if update.Message != nil {
-			switch update.Message.Text {
-			case "/chatID", "/chatid", "/chatId":
-				introduce(update)
-			default:
-				continue
-			}
-		}
-	}
-}
 
 func main() {
 	app := NewApplication()
 
-	bot_tmp, err := tgbotapi.NewBotAPI(app.config.TelegramToken)
+	botTmp, err := tgbotapi.NewBotAPI(app.config.TelegramToken)
 
 	if err != nil {
 		fmt.Println("cant start bot with token: " + app.config.TelegramToken)
 		log.Fatal(err)
 	}
 
-	app.bot = bot_tmp
+	app.bot = botTmp
 
 	if app.config.Debug {
 		app.bot.Debug = true
@@ -152,6 +87,34 @@ func main() {
 
 	router.POST("/alert/*chatids", app.HTTPAlertHandler)
 	router.Run(app.config.ListenAddr)
+}
+
+func (app *Application) telegramBot(bot *tgbotapi.BotAPI) {
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+
+	updates, err := bot.GetUpdatesChan(u)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	sendChatId := func(update tgbotapi.Update) {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Chat id is '%d'", update.Message.Chat.ID))
+		if _, err := app.bot.Send(msg); err != nil {
+			log.Println("error while sending sendChatId", err)
+		}
+	}
+
+	for update := range updates {
+		if update.Message != nil {
+			switch update.Message.Text {
+			case "/chatID", "/chatid", "/chatId":
+				sendChatId(update)
+			default:
+				continue
+			}
+		}
+	}
 }
 
 func (app *Application) parseMultiParam(s string, c *gin.Context) []int64 {
@@ -256,6 +219,46 @@ func (app *Application) HTTPAlertHandler(c *gin.Context) {
 	close(bufferCh)
 
 	c.String(http.StatusOK, "OK, delivered for", len(chatIds), "chats")
+}
+
+// Templating staff
+
+func hasKey(dict map[string]interface{}, key_search string) bool {
+	if _, ok := dict[key_search]; ok {
+		return true
+	}
+	return false
+}
+
+// TODO: move to formaters with other template loader functions?
+func (app *Application) TemplateFuncMap() (tm template.FuncMap) {
+	tm = template.FuncMap{
+		"FormatDate":        app.measureConverter.FormatDate,
+		"ToUpper":           strings.ToUpper,
+		"ToLower":           strings.ToLower,
+		"Title":             strings.Title,
+		"FormatFloat":       app.measureConverter.FormatFloat,
+		"FormatByte":        app.measureConverter.FormatByte,
+		"FormatMeasureUnit": app.measureConverter.FormatMeasureUnit,
+		"HasKey":            hasKey,
+	}
+
+	return
+}
+
+func (app *Application) TextTemplateFuncMap() (tm textTemplate.FuncMap) {
+	tm = textTemplate.FuncMap{
+		"FormatDate":        app.measureConverter.FormatDate,
+		"ToUpper":           strings.ToUpper,
+		"ToLower":           strings.ToLower,
+		"Title":             strings.Title,
+		"FormatFloat":       app.measureConverter.FormatFloat,
+		"FormatByte":        app.measureConverter.FormatByte,
+		"FormatMeasureUnit": app.measureConverter.FormatMeasureUnit,
+		"HasKey":            hasKey,
+	}
+
+	return
 }
 
 func (app *Application) NewTemplateMessage(alerts *Alerts, template string) []*bytes.Buffer {
