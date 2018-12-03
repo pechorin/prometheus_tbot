@@ -1,4 +1,4 @@
-TARGET=prometheus_bot
+TARGET=prometheus_tbot
 
 all: main.go
 	go build -o $(TARGET)
