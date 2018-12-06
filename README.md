@@ -54,5 +54,6 @@ Alert manager configuration file:
 
 ## TODO:
 - check port config
+- cleanup old shit
 - [readme] templates
 - write tests
