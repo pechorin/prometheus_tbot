@@ -57,6 +57,7 @@ Alert manager configuration file:
 ```
 
 ## TODO:
+- notify panic's with `honeybadger`
 - check port config
 - cleanup old shit
 - [readme] templates

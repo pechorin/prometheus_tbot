@@ -16,8 +16,8 @@ import (
 
 	textTemplate "text/template"
 
-	"github.com/pechorin/prometheus_tbot/pkg/appconfig"
-	"github.com/pechorin/prometheus_tbot/pkg/measureconv"
+	"github.com/rocketbank/prometheus_tbot/pkg/appconfig"
+	"github.com/rocketbank/prometheus_tbot/pkg/measureconv"
 )
 
 type Alerts struct {
