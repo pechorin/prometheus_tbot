@@ -1,9 +1,4 @@
-package main // import "github.com/pechorin/prometheus_tbot"
-
-/*
-TODO:
-— port not working (missing ':')
-*/
+package main // import "github.com/rocketbank/prometheus_tbot"
 
 import (
 	"bytes"
