@@ -2,6 +2,10 @@
 
 rewrite-in-progress prometheus telegram bot
 
+## Features
+- multi-chat sending
+- ability to define separate template for each chat
+
 ## Usage
 
 1. Create Telegram bot with [BotFather](https://t.me/BotFather), it will return your bot token
