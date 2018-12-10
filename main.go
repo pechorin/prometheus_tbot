@@ -1,4 +1,4 @@
-package main // import "github.com/rocketbank/prometheus_tbot"
+package main // import "github.com/pechorin/prometheus_tbot"
 
 import (
 	"bytes"
@@ -16,8 +16,8 @@ import (
 
 	textTemplate "text/template"
 
-	"github.com/rocketbank/prometheus_tbot/pkg/appconfig"
-	"github.com/rocketbank/prometheus_tbot/pkg/measureconv"
+	"github.com/pechorin/prometheus_tbot/pkg/appconfig"
+	"github.com/pechorin/prometheus_tbot/pkg/measureconv"
 )
 
 type Alerts struct {
