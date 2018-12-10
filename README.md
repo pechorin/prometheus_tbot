@@ -12,38 +12,63 @@ rewrite-in-progress prometheus telegram bot
 
 2. Create configuration `config.yaml`:
 
-```yml
-telegram_token: "token goes here"
+```yaml
+  telegram_token: "token goes here"
 
-# all templates should be defined here
-templates:
-  default:
-    |
-      <b>{{ .Annotations.message }}</b>
-      <code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]
-  only_message:
-    |
-      <b>{{ .Annotations.message }}</b>
+  # templates definitions
+  # default template used for all chats by default
+  templates:
+    default:
+      |
+        <b>{{ .Annotations.message }}</b>
+        <code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]
+    only_alert_message:
+      |
+        <b>{{ .Annotations.message }}</b>
 
-# do not add blank line after each alert
-# NOT IMPLEMENTED: нужно это кому-то вообще?
-# disable_message_line_separator:
-#   - default
-#   - only_message
+  # assign template for specific chat 
+  # (default template will be used for all other cases)
+  chats_templates:
+    # "chatID": custom_template_name
+    "-chat1": only_alert_message
+    "chat2": default
 
-# (chats -> template) mapping configuration
-chats_templates:
-  # "chatID": custom_template_name
-  "-228572021": only_message
-  "46733847": default
-
-time_zone: "Europe/Rome"
-split_token: "|"    
-split_msg_byte: 4000
+  time_zone: "Europe/Rome"
+  split_token: "|"    
 ```
 
-3. Run ```telegram_tbot```. See ```prometheus_tbot --help``` for command line options
-4. Write `/chatid` command and receive ChatId
+3. Run ```telegram_tbot``` with command lines options or env variables described in section below
+
+4. Write `/chatid` command in any chat with tbot and receive ChatId
+
+### Command lines options & environment variables
+
+Any command line argument can be set through ENV variables, equality table below:
+
+```
+var:                 flag:      env:
+
+Config Path          -c        CONFIG_PATH
+Listen Addr          -l        LISTEN_ADDRESS
+Telegram Token       -t        TELEGRAM_TOKEN
+```
+
+***Examples***:
+
+run with arguments
+```
+./prometheus_tbot -c path/to/config.yml -l 9000 -t TOKEN
+```
+
+run with environment variables (all vars prefixed with `TBOT`)
+```
+TBOT_CONFIG_PATH=path/to/config.yml TBOT_LISTEN_ADDR=9000 TBOT_TELEGRAM_TOKEN=TOKEN ./prometheus_tbot
+```
+
+run with proxy
+```
+HTTP_PROXY=socks5://telegram:login@server:8080 ./prometheus_tbot -c path/to/config.yml -l 9000 -t TOKEN
+```
 
 ### Configuring alert manager
 

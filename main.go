@@ -48,7 +48,7 @@ type Application struct {
 
 func NewApplication() *Application {
 	app := new(Application)
-	app.config = appconfig.Setup()
+	app.config = appconfig.New()
 	app.measureConverter = &measureconv.Converter{Config: app.config}
 
 	return app
@@ -271,6 +271,8 @@ func (app *Application) NewTemplateMessage(alerts *Alerts, template string) []*b
 
 	if alerts.Status == "firing" {
 		currentBuffer.WriteString("<b>Firing</b>🔥\n\n")
+	} else if alerts.Status == "resolved" {
+		currentBuffer.WriteString("<b>Resolved</b>✅\n\n")
 	} else {
 		currentBuffer.WriteString("<b>" + alerts.Status + "</b>" + "\n\n")
 	}

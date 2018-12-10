@@ -73,9 +73,9 @@ func (c *Converter) RoundPrec(x float64, prec int) float64 {
 
 func (c *Converter) FormatMeasureUnit(MeasureUnit string, value string) string {
 	var RetStr string
-	c.Config.SplitChart = "|"
+	splitChart := "|"
 	MeasureUnit = strings.TrimSpace(MeasureUnit) // Remove space
-	SplittedMUnit := strings.SplitN(MeasureUnit, c.Config.SplitChart, 3)
+	SplittedMUnit := strings.SplitN(MeasureUnit, splitChart, 3)
 
 	Initial := 0
 	// If is declared third part of array, then Measure unit start from just scaled measure unit.

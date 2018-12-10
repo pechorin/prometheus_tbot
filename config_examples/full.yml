@@ -1,0 +1,19 @@
+telegram_token: "token goes here"
+
+# all templates should be defined here
+templates:
+  default:
+    |
+    <b>{{ .Annotations.message }}</b>
+    <code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]
+  only_message:
+    |
+    <b>{{ .Annotations.message }}</b>
+
+# (chats -> template) mapping configuration
+chats_templates:
+# "chatID": custom_template_name
+#"-chatId1": only_message
+# "chatdId2": default
+
+time_zone: "Europe/Rome" # for template functions

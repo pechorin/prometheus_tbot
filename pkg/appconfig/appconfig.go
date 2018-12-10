@@ -2,14 +2,14 @@ package appconfig
 
 import (
 	"fmt"
-	"log"
-
 	configLoader "github.com/micro/go-config"
 	yamlEncoder "github.com/micro/go-config/encoder/yaml"
 	configSource "github.com/micro/go-config/source"
 	configLoaderEnv "github.com/micro/go-config/source/env"
 	configLoaderFile "github.com/micro/go-config/source/file"
 	configLoaderFlag "github.com/micro/go-config/source/flag"
+	"log"
+	"strings"
 )
 
 /*
@@ -17,7 +17,7 @@ import (
 
 	Path                 -c         CONFIG_PATH
 	ListenAddr           -l         LISTEN_ADDRESS
-	TemplatePath (?)     -t         TEMPLATE_PATH
+	TelegramToken (?)    -t         TELEGRAM_TOKEN
 	Debug                -d         DEBUG
 */
 
@@ -25,13 +25,13 @@ import (
 const (
 	PathFlag         = "c"
 	ListenAddrFlag   = "l"
-	TemplatePathFlag = "t"
 	DebugFlag        = "d"
+	TokenFlag        = "t"
 )
 
 // Все environment переменные должны начинаться с EnvPrefix
 const (
-	EnvPrefix = "RT_BOT"
+	EnvPrefix = "TBOT"
 )
 
 const ()
@@ -42,38 +42,29 @@ type Config struct {
 	ListenAddr        string            `json:"listen_addr"`
 	Debug             bool              `json:"debug"`
 	TelegramToken     string            `json:"telegram_token"`
-	TemplatePath      string            `json:"template_path"`
 	TimeZone          string            `json:"time_zone"`
 	TimeOutFormat     string            `json:"time_outdata"`
-	SplitChart        string            `json:"split_token"`
 	SplitMessageBytes int               `json:"split_msg_byte"`
 	Templates         map[string]string `json:"templates"`
 	ChatsTemplates    map[string]string `json:"chats_templates"`
 }
 
-// New создает конфиг с дефолтными значенииями
-func New() *Config {
-	cfg := new(Config)
-	cfg.SplitMessageBytes = 4000
-
-	return cfg
-}
-
-// Setup не только создает, но и инициализирует значения из:
+// New() создает новый сетап конфига и инициализирует значения из:
 // 1. флагов
 // 2. env переменных
 // 3. конфиг файла
-func Setup() *Config {
+func New() *Config {
+	app := new(Config)
+	app.SplitMessageBytes = 4000
+
 	config := configLoader.NewConfig()
 	src := configLoaderFlag.NewSource()
 	config.Load(src)
 
-	app := New()
-
 	app.Path = config.Get(PathFlag).String("")
 	app.ListenAddr = config.Get(ListenAddrFlag).String(":9000")
-	app.TemplatePath = config.Get(TemplatePathFlag).String("")
-	app.Debug = config.Get(ListenAddrFlag).Bool(false)
+	app.Debug = config.Get(DebugFlag).Bool(false)
+	app.TelegramToken = config.Get(TokenFlag).String("")
 
 	// теперь сверху накладываем ENV переменные
 	envConfig := configLoader.NewConfig()
@@ -89,8 +80,8 @@ func Setup() *Config {
 		app.ListenAddr = newListenAddr
 	}
 
-	if newTemplatePath := envConfig.Get("template", "path").String(""); newTemplatePath != "" {
-		app.TemplatePath = newTemplatePath
+	if newTelegramToken := envConfig.Get("telegram", "token").String(""); newTelegramToken != "" {
+		app.TelegramToken = newTelegramToken
 	}
 
 	if newDebug := envConfig.Get("debug").Bool(false); newDebug != false {
@@ -111,7 +102,11 @@ func Setup() *Config {
 		app.Templates["default"] = defaultMessageTemplate()
 	}
 
-	// fmt.Printf("APP after all steps -> %v\n", app)
+	if !strings.HasPrefix(app.ListenAddr, ":") {
+		app.ListenAddr = ":" + app.ListenAddr
+	}
+
+	fmt.Printf("Config: %v\n", app)
 
 	return app
 }
