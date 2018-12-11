@@ -32,9 +32,6 @@ rewrite-in-progress prometheus telegram bot
     # "chatID": custom_template_name
     "-chat1": only_alert_message
     "chat2": default
-
-  time_zone: "Europe/Rome"
-  split_token: "|"    
 ```
 
 3. Run ```telegram_tbot``` with command lines options or env variables described in section below
