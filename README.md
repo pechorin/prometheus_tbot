@@ -1,4 +1,4 @@
-# prometheus_bot
+# prometheus_tbot
 
 rewrite-in-progress prometheus telegram bot
 
