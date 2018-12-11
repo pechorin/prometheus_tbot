@@ -1,13 +1,13 @@
 package appconfig
 
 import (
+	"flag"
 	"fmt"
 	configLoader "github.com/micro/go-config"
 	yamlEncoder "github.com/micro/go-config/encoder/yaml"
 	configSource "github.com/micro/go-config/source"
 	configLoaderEnv "github.com/micro/go-config/source/env"
 	configLoaderFile "github.com/micro/go-config/source/file"
-	configLoaderFlag "github.com/micro/go-config/source/flag"
 	"log"
 	"strings"
 )
@@ -15,18 +15,18 @@ import (
 /*
 	var:                 flag:      env:
 
-	Path                 -c         CONFIG_PATH
-	ListenAddr           -l         LISTEN_ADDRESS
+	ConfigPath           -c         CONFIG_PATH
+	Port                 -p         PORT
 	TelegramToken (?)    -t         TELEGRAM_TOKEN
 	Debug                -d         DEBUG
 */
 
 // Маппинг полей структуры Config и флагов командной строки
 const (
-	PathFlag         = "c"
-	ListenAddrFlag   = "l"
-	DebugFlag        = "d"
-	TokenFlag        = "t"
+	ConfigPathFlag    = "c"
+	PortFlag          = "p"
+	DebugFlag         = "d"
+	TelegramTokenFlag = "t"
 )
 
 // Все environment переменные должны начинаться с EnvPrefix
@@ -38,8 +38,8 @@ const ()
 
 // Config является состоянием конфигурации приложения
 type Config struct {
-	Path              string
-	ListenAddr        string            `json:"listen_addr"`
+	ConfigPath        string
+	Port              string            `json:"port"`
 	Debug             bool              `json:"debug"`
 	TelegramToken     string            `json:"telegram_token"`
 	TimeZone          string            `json:"time_zone"`
@@ -57,30 +57,33 @@ func New() *Config {
 	app := new(Config)
 
 	// init from args
-	config := configLoader.NewConfig()
-	flagSrc := configLoaderFlag.NewSource()
-	config.Load(flagSrc)
+	tmpConfigPath    := flag.String(ConfigPathFlag, "", "Path to config file")
+	tmpPort          := flag.String(PortFlag, "9000", "Web server listen address") // rename to port?
+	tmpTelegramToken := flag.String(TelegramTokenFlag, "", "Telegram token")
+	tmpDebug         := flag.Bool(DebugFlag, false, "Debug mode")
 
-	//log.Println("map->", config.Map())
+	flag.Parse()
 
-	app.Path = config.Get(PathFlag).String("")
-	app.ListenAddr = config.Get(ListenAddrFlag).String(":9000")
-	app.Debug = config.Get(DebugFlag).Bool(false)
-	app.TelegramToken = config.Get(TokenFlag).String("")
+	app.ConfigPath    = *tmpConfigPath
+	app.Port          = *tmpPort
+	app.TelegramToken = *tmpTelegramToken
+	app.Debug         = *tmpDebug
 
-	//log.Println("debug app:", app)
+	if app.Debug {
+		log.Println("Config after flags init", app)
+	}
 
 	// merge from environment
 	envConfig := configLoader.NewConfig()
 	envSrc := configLoaderEnv.NewSource(configLoaderEnv.WithStrippedPrefix(EnvPrefix))
 	envConfig.Load(envSrc)
 
-	if newPath := envConfig.Get("config", "path").String(""); newPath != "" {
-		app.Path = newPath
+	if newConfigPath := envConfig.Get("config", "path").String(""); newConfigPath != "" {
+		app.ConfigPath = newConfigPath
 	}
 
-	if newListenAddr := envConfig.Get("listen", "address").String(""); newListenAddr != "" {
-		app.ListenAddr = newListenAddr
+	if newPort := envConfig.Get("port").String(""); newPort != "" {
+		app.Port = newPort
 	}
 
 	if newTelegramToken := envConfig.Get("telegram", "token").String(""); newTelegramToken != "" {
@@ -90,11 +93,10 @@ func New() *Config {
 	if newDebug := envConfig.Get("debug").Bool(false); newDebug != false {
 		app.Debug = newDebug
 	}
-
 	// merge from config file
 	yamlConfig := configLoader.NewConfig()
 	yamlEncoderInstance := yamlEncoder.NewEncoder()
-	fileSrc := configLoaderFile.NewSource(configLoaderFile.WithPath(app.Path), configSource.WithEncoder(yamlEncoderInstance))
+	fileSrc := configLoaderFile.NewSource(configLoaderFile.WithPath(app.ConfigPath), configSource.WithEncoder(yamlEncoderInstance))
 	yamlConfig.Load(fileSrc)
 
 	if err := yamlConfig.Scan(app); err != nil {
@@ -112,8 +114,8 @@ func New() *Config {
 		app.Templates["default"] = defaultMessageTemplate()
 	}
 
-	if !strings.HasPrefix(app.ListenAddr, ":") {
-		app.ListenAddr = ":" + app.ListenAddr
+	if !strings.HasPrefix(app.Port, ":") {
+		app.Port = ":" + app.Port
 	}
 
 	if app.SplitMessageBytes == 0 {
@@ -124,13 +126,17 @@ func New() *Config {
 		fmt.Printf("Config: %v\n", app)
 	}
 
+	if app.TelegramToken == "" {
+		log.Fatalln("No Telegram token provided")
+	}
+
 	return app
 }
 
 func defaultMessageTemplate() string {
 	return `
-    <b>{{ .Annotations.message }}</b>
-    <code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]`
+<b>{{ .Annotations.message }}</b>
+<code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]`
 }
 
 func main() {}

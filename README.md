@@ -46,7 +46,7 @@ Any command line argument can be set through ENV variables, equality table below
 var:                 flag:      env:
 
 Config Path          -c        TBOT_CONFIG_PATH
-Listen Addr          -l        TBOT_LISTEN_ADDRESS
+Port                 -p        TBOT_PORT
 Telegram Token       -t        TBOT_TELEGRAM_TOKEN
 Debug                -d        TBOT_DEBUG
 ```
@@ -55,17 +55,17 @@ Debug                -d        TBOT_DEBUG
 
 run with arguments
 ```
-./prometheus_tbot -c path/to/config.yml -l 9000 -t TOKEN
+./prometheus_tbot -c path/to/config.yml -p 9000 -t TOKEN
 ```
 
 run with environment variables (all vars prefixed with `TBOT`)
 ```
-TBOT_CONFIG_PATH=path/to/config.yml TBOT_LISTEN_ADDR=9000 TBOT_TELEGRAM_TOKEN=TOKEN ./prometheus_tbot
+TBOT_CONFIG_PATH=path/to/config.yml TBOT_PORT=9000 TBOT_TELEGRAM_TOKEN=TOKEN ./prometheus_tbot
 ```
 
 run with proxy
 ```
-HTTP_PROXY=socks5://telegram:login@server:8080 ./prometheus_tbot -c path/to/config.yml -l 9000 -t TOKEN
+HTTP_PROXY=socks5://telegram:login@server:8080 ./prometheus_tbot -c path/to/config.yml -p 9000 -t TOKEN
 ```
 
 ### Configuring alert manager

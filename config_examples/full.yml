@@ -1,6 +1,7 @@
 telegram_token: "token goes here"
 
-# all templates should be defined here
+# templates definitions
+# default template used for all chats by default
 templates:
   default:
     |
@@ -10,7 +11,8 @@ templates:
     |
     <b>{{ .Annotations.message }}</b>
 
-# (chats -> template) mapping configuration
+# assign template for specific chat
+# (default template will be used for all other cases)
 chats_templates:
 # "chatID": custom_template_name
 #"-chatId1": only_message

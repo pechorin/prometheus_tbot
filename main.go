@@ -75,13 +75,16 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	log.Printf("Authorised on account %s", app.bot.Self.UserName)
+	if app.config.Debug {
+		log.Printf("Authorised on account %s", app.bot.Self.UserName)
+	}
+
 	go app.telegramBot(app.bot)
 
 	router := gin.Default()
 
 	router.POST("/alert/*chatids", app.HTTPAlertHandler)
-	router.Run(app.config.ListenAddr)
+	router.Run(app.config.Port)
 }
 
 func (app *Application) telegramBot(bot *tgbotapi.BotAPI) {
@@ -171,7 +174,10 @@ func (app *Application) HTTPAlertHandler(c *gin.Context) {
 
 		for chatID := range bufferCh {
 			if chatID == 0 {
-				log.Println("Skip for 0 chatID")
+				if app.config.Debug {
+					log.Println("Skip for 0 chatID")
+				}
+
 				continue
 			}
 
@@ -207,7 +213,10 @@ func (app *Application) HTTPAlertHandler(c *gin.Context) {
 	}()
 
 	for _, chatID := range chatIds {
-		log.Println("Sending chat-id", chatID)
+		if app.config.Debug {
+			log.Println("Sending chat-id", chatID)
+		}
+
 		bufferCh <- chatID
 	}
 
