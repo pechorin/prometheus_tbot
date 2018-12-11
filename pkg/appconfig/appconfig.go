@@ -55,28 +55,31 @@ type Config struct {
 // 3. конфиг файла
 func New() *Config {
 	app := new(Config)
-	app.SplitMessageBytes = 4000
 
+	// init from args
 	config := configLoader.NewConfig()
-	src := configLoaderFlag.NewSource()
-	config.Load(src)
+	flagSrc := configLoaderFlag.NewSource()
+	config.Load(flagSrc)
+
+	//log.Println("map->", config.Map())
 
 	app.Path = config.Get(PathFlag).String("")
 	app.ListenAddr = config.Get(ListenAddrFlag).String(":9000")
 	app.Debug = config.Get(DebugFlag).Bool(false)
 	app.TelegramToken = config.Get(TokenFlag).String("")
 
-	// теперь сверху накладываем ENV переменные
+	//log.Println("debug app:", app)
+
+	// merge from environment
 	envConfig := configLoader.NewConfig()
 	envSrc := configLoaderEnv.NewSource(configLoaderEnv.WithStrippedPrefix(EnvPrefix))
 	envConfig.Load(envSrc)
 
 	if newPath := envConfig.Get("config", "path").String(""); newPath != "" {
-		// fmt.Println("load config from ENV -> " + newPath)
 		app.Path = newPath
 	}
 
-	if newListenAddr := envConfig.Get("listen", "addr").String(""); newListenAddr != "" {
+	if newListenAddr := envConfig.Get("listen", "address").String(""); newListenAddr != "" {
 		app.ListenAddr = newListenAddr
 	}
 
@@ -88,6 +91,7 @@ func New() *Config {
 		app.Debug = newDebug
 	}
 
+	// merge from config file
 	yamlConfig := configLoader.NewConfig()
 	yamlEncoderInstance := yamlEncoder.NewEncoder()
 	fileSrc := configLoaderFile.NewSource(configLoaderFile.WithPath(app.Path), configSource.WithEncoder(yamlEncoderInstance))
@@ -98,7 +102,13 @@ func New() *Config {
 		log.Fatal(err)
 	}
 
+	// finalize configuration
+
 	if len(app.Templates) == 0 {
+		if app.Templates == nil {
+			app.Templates = make(map[string]string)
+		}
+
 		app.Templates["default"] = defaultMessageTemplate()
 	}
 
@@ -106,7 +116,13 @@ func New() *Config {
 		app.ListenAddr = ":" + app.ListenAddr
 	}
 
-	fmt.Printf("Config: %v\n", app)
+	if app.SplitMessageBytes == 0 {
+		app.SplitMessageBytes = 4000
+	}
+
+	if app.Debug {
+		fmt.Printf("Config: %v\n", app)
+	}
 
 	return app
 }

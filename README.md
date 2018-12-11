@@ -48,9 +48,10 @@ Any command line argument can be set through ENV variables, equality table below
 ```
 var:                 flag:      env:
 
-Config Path          -c        CONFIG_PATH
-Listen Addr          -l        LISTEN_ADDRESS
-Telegram Token       -t        TELEGRAM_TOKEN
+Config Path          -c        TBOT_CONFIG_PATH
+Listen Addr          -l        TBOT_LISTEN_ADDRESS
+Telegram Token       -t        TBOT_TELEGRAM_TOKEN
+Debug                -d        TBOT_DEBUG
 ```
 
 ***Examples***:
