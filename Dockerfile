@@ -9,7 +9,11 @@ RUN \
     CGO_ENABLED=0 GOOS=linux go build -v -a -installsuffix cgo -o prometheus_tbot 
 
 FROM alpine:3.8
-COPY --from=builder /prometheus_tbot/prometheus_tbot /
+COPY --from=builder /prometheus_tbot/prometheus_tbot /usr/local/bin/
+RUN addgroup -g 5001 tbot && \
+    adduser -D -u 5001 -G tbot tbot
+RUN chown -R tbot:tbot /usr/local/bin/prometheus_tbot
 RUN apk add --no-cache ca-certificates tzdata
+USER tbot
 EXPOSE 9087
-ENTRYPOINT ["/prometheus_tbot"]
+ENTRYPOINT ["/usr/local/bin/prometheus_tbot"]

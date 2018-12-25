@@ -1,0 +1,7 @@
+LICENSE
+*.md
+Dockerfile
+Makefile
+.gitignore
+config_examples
+testdata
