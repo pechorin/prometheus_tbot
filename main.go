@@ -40,6 +40,12 @@ type Alert struct {
 	StartsAt     string                 `json:"startsAt"`
 }
 
+type PrometheusAlertsView struct {
+	Alerts     	   *Alerts
+	PageNumber 	   int
+	PageMessages   []*bytes.Buffer
+}
+
 type Application struct {
 	config           *appconfig.Config
 	bot              *tgbotapi.BotAPI
@@ -54,12 +60,10 @@ func NewApplication() *Application {
 	return app
 }
 
-
 func main() {
 	app := NewApplication()
 
 	botTmp, err := tgbotapi.NewBotAPI(app.config.TelegramToken)
-
 	if err != nil {
 		fmt.Println("cant start bot with token: " + app.config.TelegramToken)
 		log.Fatal(err)
@@ -69,14 +73,11 @@ func main() {
 
 	if app.config.Debug {
 		app.bot.Debug = true
+		log.Printf("Authorised on account %s", app.bot.Self.UserName)
 	}
 
 	if !(app.config.Debug) {
 		gin.SetMode(gin.ReleaseMode)
-	}
-
-	if app.config.Debug {
-		log.Printf("Authorised on account %s", app.bot.Self.UserName)
 	}
 
 	go app.telegramBot(app.bot)
@@ -85,6 +86,9 @@ func main() {
 
 	router.POST("/alert/*chatids", app.HTTPAlertHandler)
 	router.Run(app.config.Port)
+
+	fmt.Printf("Prometheus Tbot started at port %v", app.config.Port)
+	log.Printf("Prometheus Tbot started at port %v", app.config.Port)
 }
 
 func (app *Application) telegramBot(bot *tgbotapi.BotAPI) {
@@ -181,23 +185,27 @@ func (app *Application) HTTPAlertHandler(c *gin.Context) {
 				continue
 			}
 
-			defaultMessages := app.NewTemplateMessage(alerts, app.config.Templates["default"])
+			// default render values
+			selectedLayout := appconfig.SelectedLayout{ "prometheus", "prometheus" }
 
 			chatIDStr := strconv.FormatInt(chatID, 10)
 
-			renderBuffersPtr := &defaultMessages
+			if chatLayoutConfig, ok := app.config.ChatsLayouts[chatIDStr]; ok == true {
+				if newLayout, ok := chatLayoutConfig["layout"]; ok == true {
+					selectedLayout.Layout = newLayout
+				}
 
-			if chatTemplateName, ok := app.config.ChatsTemplates[chatIDStr]; ok == true {
-				if chatTemplate, ok := app.config.Templates[chatTemplateName]; ok == true {
-					chatMessages := app.NewTemplateMessage(alerts, chatTemplate)
-					renderBuffersPtr = &chatMessages
+				if newMessageTemplate, ok := chatLayoutConfig["message_template"]; ok == true {
+					selectedLayout.MessageTemplate = newMessageTemplate
 				}
 			}
 
-			for idx, buffer := range *renderBuffersPtr {
+			sendBuffers := app.RenderPrometheusAlerts(alerts, selectedLayout)
+
+			for idx, buffer := range sendBuffers {
 				if buffer.Len() > 0 {
 					if idx > 0 {
-						time.Sleep(3)
+						time.Sleep(3) // delay before second message
 					}
 
 					msg := tgbotapi.NewMessage(chatID, buffer.String())
@@ -264,46 +272,98 @@ func (app *Application) TextTemplateFuncMap() (tm textTemplate.FuncMap) {
 
 	return
 }
-
-func (app *Application) NewTemplateMessage(alerts *Alerts, template string) []*bytes.Buffer {
-	buffers := make([]*bytes.Buffer, 0)
-	buffers = append(buffers, new(bytes.Buffer))
-
-	currentBufferIndex := 0
-	currentBuffer := buffers[currentBufferIndex]
-
-	tmpl, err := textTemplate.New("defaultMessage").Funcs(app.TextTemplateFuncMap()).Parse(template)
-
+// TODO: сейчас оно вешает весь процесс при падении здесь
+// TODO: just return an error?
+func (app *Application) RenderPrometheusAlerts(alerts *Alerts, selectedLayout appconfig.SelectedLayout) []*bytes.Buffer {
+	// extract layout templating
+	layoutTemplate := textTemplate.New("TelegramMessage").Funcs(app.TextTemplateFuncMap())
+	layoutTemplate, err := layoutTemplate.Parse(app.config.Layouts[selectedLayout.Layout])
 	if err != nil {
-		log.Fatalf("Problem parsing template messageMini: %v", err)
+		log.Fatalf("Error while parsing layout %v %v", selectedLayout.Layout, err)
 	}
 
-	if alerts.Status == "firing" {
-		currentBuffer.WriteString("<b>Firing</b>🔥\n\n")
-	} else if alerts.Status == "resolved" {
-		currentBuffer.WriteString("<b>Resolved</b>✅\n\n")
-	} else {
-		currentBuffer.WriteString("<b>" + alerts.Status + "</b>" + "\n\n")
+	layoutTemplate, err = layoutTemplate.Parse(appconfig.MessagesWrapperTemplate())
+	if err != nil {
+		log.Fatalf("Error while parsing DefaultPrometheusMessageTemplate: %v", appconfig.MessagesWrapperTemplate(), err)
 	}
+
+	// extract message template
+	messageTemplate := textTemplate.New("TelegramRowMessage").Funcs(app.TextTemplateFuncMap())
+	messageTemplate, err = messageTemplate.Parse(app.config.MessageTemplates[selectedLayout.MessageTemplate])
+	if err != nil {
+		log.Fatalf("Error while parsing message template %v %v", selectedLayout.MessageTemplate, err)
+	}
+
+	// render and collect all rendered alerts
+	renderedMessages := make([]*bytes.Buffer, 0)
+
+	// как мне хранить величины?
+
+	// TODO: debug pages bytes
+	// TODO: debug messages render index
 
 	for _, alert := range alerts.Alerts {
 		tempBuffer := new(bytes.Buffer)
 
-		if err := tmpl.Execute(tempBuffer, alert); err != nil {
-			log.Fatalf("Problem executing template: %v", err)
+		// render message row partial
+		if err := messageTemplate.Execute(tempBuffer, alert); err != nil {
+			log.Fatalf("Error while rendering message template: %v", err)
 		}
 
-		// if currentBuffer Len is reach limit then create new buffer
-		if (currentBuffer.Len() + tempBuffer.Len()) > app.config.SplitMessageBytes {
-			buffers = append(buffers, new(bytes.Buffer))
-			currentBufferIndex = currentBufferIndex + 1
-			currentBuffer = buffers[currentBufferIndex]
-		}
-
-		// currentBuffer.WriteString("\n")
-		currentBuffer.WriteString(tempBuffer.String())
-		currentBuffer.WriteString("\n")
+		renderedMessages = append(renderedMessages, tempBuffer)
 	}
 
-	return buffers
+	// start rendering separated pages (if required)
+	renderedPages := make([]*bytes.Buffer, 0)
+	renderedPages = append(renderedPages, new(bytes.Buffer))
+
+	currentPage           := 0
+	currentPageStartIndex := 0
+
+	// TODO: Not optimal algorithm because i use incremental rendering + len check.
+	// Instead calculate len, split to partitions and render in pageNumbers steps.
+	for idx, _ := range alerts.Alerts {
+		// get current messages offset
+		view := new(PrometheusAlertsView)
+		view.PageNumber = currentPage
+		view.PageMessages = renderedMessages[currentPageStartIndex:idx + 1]
+		view.Alerts = alerts
+
+		// render messages according page number and offset
+		temp := new(bytes.Buffer)
+		if err := layoutTemplate.Execute(temp, view); err != nil {
+			log.Fatalf("Error while rendering full template: %v", err)
+		}
+
+		if (temp.Len()) <= app.config.SplitMessageBytes {
+			renderedPages[currentPage].Reset()
+			renderedPages[currentPage].Write(temp.Bytes())
+		} else {
+			// page is full, create new one
+			currentPage += 1
+			currentPageStartIndex = idx
+
+			newPageView := new(PrometheusAlertsView)
+			newPageView.PageNumber = currentPage
+			newPageView.PageMessages = renderedMessages[currentPageStartIndex:idx + 1]
+			newPageView.Alerts = alerts
+
+			newPageTemp := new(bytes.Buffer)
+			if err := layoutTemplate.Execute(newPageTemp, newPageView); err != nil {
+				log.Fatalf("Error while rendering full template: %v", err)
+			}
+
+			renderedPages = append(renderedPages, new(bytes.Buffer))
+			renderedPages[currentPage].Write(newPageTemp.Bytes())
+			//currentPage +
+		}
+	}
+
+	if app.config.Debug {
+		for idx, page := range renderedPages {
+			log.Printf("page %v len: %v", idx, page.Len())
+		}
+	}
+
+	return renderedPages
 }

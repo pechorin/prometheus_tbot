@@ -45,8 +45,16 @@ type Config struct {
 	TimeZone          string            `json:"time_zone"`
 	TimeOutFormat     string            `json:"time_outdata"`
 	SplitMessageBytes int               `json:"split_msg_byte"`
-	Templates         map[string]string `json:"templates"`
-	ChatsTemplates    map[string]string `json:"chats_templates"`
+
+	Layouts           map[string]string `json:"layouts"`
+	MessageTemplates  map[string]string `json:"message_templates"`
+
+	ChatsLayouts      map[string]map[string]string `json:"chats_layouts"`
+}
+
+type SelectedLayout struct {
+	Layout string
+	MessageTemplate string
 }
 
 // New() создает новый сетап конфига и инициализирует значения из:
@@ -106,12 +114,20 @@ func New() *Config {
 
 	// finalize configuration
 
-	if len(app.Templates) == 0 {
-		if app.Templates == nil {
-			app.Templates = make(map[string]string)
+	if len(app.Layouts) == 0 {
+		if app.Layouts == nil {
+			app.Layouts = make(map[string]string)
 		}
 
-		app.Templates["default"] = defaultMessageTemplate()
+		app.Layouts["prometheus"] = DefaultPrometheusLayout()
+	}
+
+	if len(app.MessageTemplates) == 0 {
+		if app.MessageTemplates == nil {
+			app.MessageTemplates = make(map[string]string)
+		}
+
+		app.MessageTemplates["prometheus"] = DefaultPrometheusMessageTemplate()
 	}
 
 	if !strings.HasPrefix(app.Port, ":") {
@@ -133,10 +149,29 @@ func New() *Config {
 	return app
 }
 
-func defaultMessageTemplate() string {
+func DefaultPrometheusLayout() string {
+	return `
+{{if eq .PageNumber 0 }}
+	{{- if eq .Alerts.Status "firing"}}<b>Firing 🔥</b>{{ end -}}
+	{{- if eq .Alerts.Status "resolved" }}<b>Resolved ✅</b>{{ end -}}
+{{ else }}
+	...
+{{- end }}
+{{ template "messages" .PageMessages }}`
+}
+
+func DefaultPrometheusMessageTemplate() string {
 	return `
 <b>{{ .Annotations.message }}</b>
 <code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]`
+}
+
+func MessagesWrapperTemplate() string {
+	return `
+{{ define "messages" }}
+{{ range . }}{{ . }}
+{{ end }}
+{{ end }}`
 }
 
 func main() {}
