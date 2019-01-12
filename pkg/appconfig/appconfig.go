@@ -53,8 +53,9 @@ type Config struct {
 }
 
 type SelectedLayout struct {
-	Layout string
-	MessageTemplate string
+	Layout          	string	`json:"layout"`
+	MessageTemplate  	string	`json:"message_template"`
+	GroupByAlertName	bool	`json:"group_by_alert_name"`
 }
 
 // New() создает новый сетап конфига и инициализирует значения из:
@@ -166,12 +167,24 @@ func DefaultPrometheusMessageTemplate() string {
 <code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]`
 }
 
-func MessagesWrapperTemplate() string {
+func DefaultPrometheusGroupedMessageTemplate() string {
+	return `
+{{ .Annotations.message }} [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]`
+}
+
+func DefaultPrometheusGroupLabelTemplate() string {
+	return `
+<b>{{ . }}</b>
+`
+}
+
+func PrometheusMessagesWrapperTemplate() string {
 	return `
 {{ define "messages" }}
 {{ range . }}{{ . }}
 {{ end }}
 {{ end }}`
 }
+
 
 func main() {}

@@ -80,8 +80,8 @@ Alert manager configuration file:
 ```
 
 ## TODO:
-- notify panic's with `honeybadger`
-- check port config
-- cleanup old shit
+- better crash reports
+- [?] notify panic's with `honeybadger`
 - [readme] templates
 - write tests
+- [late] add ability to test templates

@@ -41,15 +41,15 @@ type Alert struct {
 }
 
 type PrometheusAlertsView struct {
-	Alerts     	   *Alerts
-	PageNumber 	   int
-	PageMessages   []*bytes.Buffer
+	PageNumber 	   			int
+	PageMessages   			[]*bytes.Buffer
+	Alerts  	   			*Alerts // TODO: rename to AlertsJson / AlertsData ?
 }
 
 type Application struct {
-	config           *appconfig.Config
-	bot              *tgbotapi.BotAPI
-	measureConverter *measureconv.Converter
+	config           	*appconfig.Config
+	bot              	*tgbotapi.BotAPI
+	measureConverter 	*measureconv.Converter
 }
 
 func NewApplication() *Application {
@@ -170,11 +170,11 @@ func (app *Application) HTTPAlertHandler(c *gin.Context) {
 	bufferCh := make(chan int64, len(chatIds))
 
 	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				log.Println("Panic handled while sending message:", err)
-			}
-		}()
+		//defer func() {
+		//	if err := recover(); err != nil {
+		//		log.Printf("Panic handled while sending message: %v", err)
+		//	}
+		//}()
 
 		for chatID := range bufferCh {
 			if chatID == 0 {
@@ -186,7 +186,7 @@ func (app *Application) HTTPAlertHandler(c *gin.Context) {
 			}
 
 			// default render values
-			selectedLayout := appconfig.SelectedLayout{ "prometheus", "prometheus" }
+			selectedLayout := appconfig.SelectedLayout{ Layout: "prometheus", MessageTemplate: "prometheus", GroupByAlertName: true }
 
 			chatIDStr := strconv.FormatInt(chatID, 10)
 
@@ -200,7 +200,14 @@ func (app *Application) HTTPAlertHandler(c *gin.Context) {
 				}
 			}
 
-			sendBuffers := app.RenderPrometheusAlerts(alerts, selectedLayout)
+			// currently where are 2 rendering types for Prometheus: with and without grouping
+			sendBuffers := make([]*bytes.Buffer, 0)
+
+			if selectedLayout.GroupByAlertName == true {
+				sendBuffers = app.RenderPrometheusAlertsWithGrouping(alerts, selectedLayout)
+			} else {
+				sendBuffers = app.RenderPrometheusAlerts(alerts, selectedLayout)
+			}
 
 			for idx, buffer := range sendBuffers {
 				if buffer.Len() > 0 {
@@ -282,9 +289,9 @@ func (app *Application) RenderPrometheusAlerts(alerts *Alerts, selectedLayout ap
 		log.Fatalf("Error while parsing layout %v %v", selectedLayout.Layout, err)
 	}
 
-	layoutTemplate, err = layoutTemplate.Parse(appconfig.MessagesWrapperTemplate())
+	layoutTemplate, err = layoutTemplate.Parse(appconfig.DefaultPrometheusMessageTemplate())
 	if err != nil {
-		log.Fatalf("Error while parsing DefaultPrometheusMessageTemplate: %v", appconfig.MessagesWrapperTemplate(), err)
+		log.Fatalf("Error while parsing DefaultPrometheusMessageTemplate: %v", appconfig.DefaultPrometheusMessageTemplate(), err)
 	}
 
 	// extract message template
@@ -294,12 +301,9 @@ func (app *Application) RenderPrometheusAlerts(alerts *Alerts, selectedLayout ap
 		log.Fatalf("Error while parsing message template %v %v", selectedLayout.MessageTemplate, err)
 	}
 
-	// render and collect all rendered alerts
+	// render alerts (separate from template)
 	renderedMessages := make([]*bytes.Buffer, 0)
 
-	// как мне хранить величины?
-
-	// TODO: debug pages bytes
 	// TODO: debug messages render index
 
 	for _, alert := range alerts.Alerts {
@@ -323,7 +327,135 @@ func (app *Application) RenderPrometheusAlerts(alerts *Alerts, selectedLayout ap
 	// TODO: Not optimal algorithm because i use incremental rendering + len check.
 	// Instead calculate len, split to partitions and render in pageNumbers steps.
 	for idx, _ := range alerts.Alerts {
-		// get current messages offset
+		view := new(PrometheusAlertsView)
+		view.PageNumber = currentPage
+		view.PageMessages = renderedMessages[currentPageStartIndex:idx + 1]
+		view.Alerts = alerts
+
+		// render messages according page number and offset
+		temp := new(bytes.Buffer)
+		if err := layoutTemplate.Execute(temp, view); err != nil {
+			log.Fatalf("Error while rendering full template: %v", err)
+		}
+
+		if (temp.Len()) <= app.config.SplitMessageBytes {
+			renderedPages[currentPage].Reset()
+			renderedPages[currentPage].Write(temp.Bytes())
+		} else {
+			// page is full, create new one
+			currentPage += 1
+			currentPageStartIndex = idx
+
+			newPageView := new(PrometheusAlertsView)
+			newPageView.PageNumber = currentPage
+			newPageView.PageMessages = renderedMessages[currentPageStartIndex:idx + 1]
+			newPageView.Alerts = alerts
+
+			newPageTemp := new(bytes.Buffer)
+			if err := layoutTemplate.Execute(newPageTemp, newPageView); err != nil {
+				log.Fatalf("Error while rendering full template: %v", err)
+			}
+
+			renderedPages = append(renderedPages, new(bytes.Buffer))
+			renderedPages[currentPage].Write(newPageTemp.Bytes())
+			//currentPage +
+		}
+	}
+
+	if app.config.Debug {
+		for idx, page := range renderedPages {
+			log.Printf("page %v len: %v", idx, page.Len())
+		}
+	}
+
+	return renderedPages
+}
+
+// TODO: сейчас оно вешает весь процесс при падении здесь
+// TODO: just return an error?
+func (app *Application) RenderPrometheusAlertsWithGrouping(alerts *Alerts, selectedLayout appconfig.SelectedLayout) []*bytes.Buffer {
+	// extract layout templating
+	layoutTemplate := textTemplate.New("TelegramMessage").Funcs(app.TextTemplateFuncMap())
+	layoutTemplate, err := layoutTemplate.Parse(app.config.Layouts[selectedLayout.Layout])
+	if err != nil {
+		log.Fatalf("Error while parsing layout %v %v", selectedLayout.Layout, err)
+	}
+
+	layoutTemplate, err = layoutTemplate.Parse(appconfig.PrometheusMessagesWrapperTemplate())
+	if err != nil {
+		log.Fatalf("Error while parsing DefaultPrometheusMessageTemplate: %v", appconfig.PrometheusMessagesWrapperTemplate(), err)
+	}
+
+	// extract message template
+	messageTemplate := textTemplate.New("TelegramRowMessage").Funcs(app.TextTemplateFuncMap())
+	//messageTemplate, err = messageTemplate.Parse(app.config.MessageTemplates[selectedLayout.MessageTemplate])
+	messageTemplate, err = messageTemplate.Parse(appconfig.DefaultPrometheusGroupedMessageTemplate())
+	if err != nil {
+		log.Fatalf("Error while parsing message template %v %v", selectedLayout.MessageTemplate, err)
+	}
+
+	// group rendered alerts (separate from template)
+	groupsWithMessages := make(map[string][]*bytes.Buffer)
+
+	// TODO: debug messages render index
+
+	groupTemplate, err := textTemplate.New("TextTemplate").Parse(appconfig.DefaultPrometheusGroupLabelTemplate())
+	if err != nil {
+		log.Fatalf("Error while parsinng group label template: %v", err)
+	}
+
+	for _, alert := range alerts.Alerts {
+		renderedAlert := new(bytes.Buffer)
+
+		// render message row partial
+		if err := messageTemplate.Execute(renderedAlert, alert); err != nil {
+			log.Fatalf("Error while rendering message template: %v", err)
+		}
+
+		// extract group key
+		if label, ok := alert.Labels["alertname"]; ok == true {
+			if labelStr, ok := label.(string); ok == true {
+				// create group if not exist
+				if _, ok := groupsWithMessages[labelStr]; ok == false {
+					groupsWithMessages[labelStr] = make([]*bytes.Buffer, 0)
+
+					// first row is group label
+					renderedGroupLabel := new(bytes.Buffer)
+					if err := groupTemplate.Execute(renderedGroupLabel, labelStr); err != nil {
+						log.Fatalf("Cannot execute group label template: %v", err)
+					}
+
+					groupsWithMessages[labelStr] = append(groupsWithMessages[labelStr], renderedGroupLabel)
+				}
+
+				// append message to group
+				groupsWithMessages[labelStr] = append(groupsWithMessages[labelStr], renderedAlert)
+			} else {
+				log.Fatalf("Typecast failed for label %v", label)
+			}
+		} else {
+			log.Fatalf("No alertname provided inside %v", alert.Labels)
+		}
+	}
+
+	// map groups + messages
+	renderedMessages := make([]*bytes.Buffer, 0)
+	for _, rows := range groupsWithMessages {
+		for _, row := range rows {
+			renderedMessages = append(renderedMessages, row)
+		}
+	}
+
+	// start rendering separated pages (if required)
+	renderedPages := make([]*bytes.Buffer, 0)
+	renderedPages = append(renderedPages, new(bytes.Buffer))
+
+	currentPage           := 0
+	currentPageStartIndex := 0
+
+	// TODO: Not optimal algorithm because i use incremental rendering + len check.
+	// Instead calculate len, split to partitions and render in pageNumbers steps.
+	for idx, _ := range renderedMessages {
 		view := new(PrometheusAlertsView)
 		view.PageNumber = currentPage
 		view.PageMessages = renderedMessages[currentPageStartIndex:idx + 1]
