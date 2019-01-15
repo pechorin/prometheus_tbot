@@ -1,0 +1,38 @@
+telegram_token: "token goes here"
+
+layouts:
+  prometheus:
+    |
+    {{if eq .PageNumber 0 }}
+      {{- if eq .Alerts.Status "firing"}}<b>Firing 🔥</b>{{ end -}}
+      {{- if eq .Alerts.Status "resolved" }}<b>Resolved ✅</b>{{ end -}}
+    {{ else }}
+    ...
+    {{- end }}
+    {{ template "messages" .PageMessages }}`
+
+message_templates:
+  prometheus:
+    |
+    <b>{{ .Annotations.message }}</b>
+    <code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]
+
+  prometheus_mini:
+    |
+    <b>{{ .Annotations.message }}</b>
+
+  prometheus_grouped:
+    |
+    <b>{{ .Annotations.message }}</b> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]
+
+
+chats_layouts:
+  "-228572021":
+    layout: prometheus
+    message_template: prometheus_mini
+
+  "46733847":
+    layout: prometheus
+    message_template: prometheus
+    group_by_alert_name: true
+

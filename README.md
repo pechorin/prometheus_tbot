@@ -15,23 +15,40 @@ rewrite-in-progress prometheus telegram bot
 ```yaml
   telegram_token: "token goes here"
 
-  # templates definitions
-  # default template used for all chats by default
-  templates:
-    default:
+  layouts:
+    prometheus:
+      |
+        {{if eq .PageNumber 0 }}
+          {{- if eq .Alerts.Status "firing"}}<b>Firing 🔥</b>{{ end -}}
+          {{- if eq .Alerts.Status "resolved" }}<b>Resolved ✅</b>{{ end -}}
+        {{ else }}
+        ...
+        {{- end }}
+        {{ template "messages" .PageMessages }}`
+        
+  messages_layouts:
+    prometheus:
       |
         <b>{{ .Annotations.message }}</b>
         <code>{{ .Labels.alertname }}</code> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]
-    only_alert_message:
+
+    prometheus_mini:
       |
         <b>{{ .Annotations.message }}</b>
 
-  # assign template for specific chat 
-  # (default template will be used for all other cases)
-  chats_templates:
-    # "chatID": custom_template_name
-    "-chat1": only_alert_message
-    "chat2": default
+    prometheus_grouped:
+      |
+        <b>{{ .Annotations.message }}</b> [ {{ .Labels.k8s }} / {{ .Labels.severity }} ]
+        
+  chats_layouts:
+    "-228572021":
+      layout: prometheus
+      message_template: prometheus_mini
+
+    "46733847":
+      layout: prometheus
+      message_template: prometheus
+      group_by_alert_name: true
 ```
 
 3. Run ```telegram_tbot``` with command lines options or env variables described in section below

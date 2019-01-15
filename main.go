@@ -3,6 +3,7 @@ package main // import "github.com/pechorin/prometheus_tbot"
 import (
 	"bytes"
 	"html/template"
+	"os"
 	"time"
 
 	"fmt"
@@ -83,12 +84,11 @@ func main() {
 	go app.telegramBot(app.bot)
 
 	router := gin.Default()
-
 	router.POST("/alert/*chatids", app.HTTPAlertHandler)
 	router.Run(app.config.Port)
 
-	fmt.Printf("Prometheus Tbot started at port %v", app.config.Port)
-	log.Printf("Prometheus Tbot started at port %v", app.config.Port)
+	startStr := fmt.Sprintf("Prometheus Tbot started at port %v", app.config.Port)
+	os.Stdout.WriteString(startStr)
 }
 
 func (app *Application) telegramBot(bot *tgbotapi.BotAPI) {
